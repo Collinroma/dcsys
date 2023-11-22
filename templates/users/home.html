@@ -1,0 +1,180 @@
+{% extends "users/base.html" %}
+{% block title %} Home Page {% endblock title%}
+{% block content %}
+<div class="jumbotron text-center">
+    {% if user.is_authenticated %}
+    <h1 class="display-5">Welcome, {{user.username|default:'Guest'}}</h1>
+    {% endif %}
+    <p class="lead">
+        Staying focused on driving and avoiding distractions, following traffic rules and regulations, practicing
+        defensive driving skills, and wearing seatbelts can help reduce the risk of accidents on the road and protect
+        yourself and others while driving.
+    </p>
+    <hr>
+    <p class="lead">
+        {% if user.is_authenticated %}
+        <a class="btn btn-success btn-sm" href="{% url 'drivecaredetection' %}" role="button">Drive Care Protection</a>
+        <button type="button" class="btn btn-info btn-sm" data-toggle="modal"
+            data-target="#webcamModal">Dash-Cam</button>
+        <a class="btn btn-primary btn-sm" href="{% url 'logout' %}" role="button">Logout</a>
+        {% else %}
+        <a class="btn btn-primary btn-sm" href="{% url 'login' %}" role="button">Sign in</a>
+        {% endif %}
+    </p>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="webcamModal" tabindex="-1" role="dialog" aria-labelledby="webcamModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="webcamModalLabel">Webcam</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!--<video id="video" width="100%" height="100%" autoplay></video>-->
+                <!-- Modify the video element to include the playsinline, width, and height attributes -->
+                <video id="video" playsinline width="100%" height="100%" autoplay></video>
+                <div id="recordingIndicator" style="display: none;">Recording... <span id="timer">00:00</span></div>
+            </div>
+            <div class="modal-footer">
+                <!-- Add a button to switch between front and rear cameras -->
+                <button type="button" class="btn btn-primary" id="switchButton">Switch Camera</button>
+                <button type="button" class="btn btn-danger" id="startButton">Start Recording</button>
+                <button type="button" class="btn btn-warning" id="stopButton" disabled>Stop Recording</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <!-- Add a button to toggle full screen mode for the video -->
+                <button type="button" class="btn btn-info" id="fullScreenButton">Full Screen</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+        var video = document.getElementById('video');
+        var stream = null;
+        var mediaRecorder = null;
+        var chunks = [];
+        var timerInterval = null;
+
+        // Add event listener to switch button
+        $('#switchButton').on('click', function () {
+            if (stream) {
+                // Stop the current stream
+                stream.getTracks().forEach(function (track) {
+                    track.stop();
+                });
+
+                // Switch the camera
+                var facingMode = (video.facingMode == 'user') ? 'environment' : 'user';
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingMode
+                    }
+                })
+                    .then(function (s) {
+                        stream = s;
+                        video.srcObject = stream;
+                    })
+                    .catch(function (error) {
+                        console.log("Something went wrong!");
+                    });
+            }
+        });
+
+        $('#webcamModal').on('shown.bs.modal', function () {
+            if (navigator.mediaDevices.getUserMedia) {
+                // Modify the getUserMedia function to include the facingMode constraint
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user'
+                    }
+                })
+                    .then(function (s) {
+                        stream = s;
+                        video.srcObject = stream;
+                    })
+                    .catch(function (error) {
+                        console.log("Something went wrong!");
+                    });
+            }
+        });
+
+        $('#webcamModal').on('hidden.bs.modal', function () {
+            if (stream) {
+                stream.getTracks().forEach(function (track) {
+                    track.stop();
+                });
+            }
+            video.srcObject = null;
+        });
+
+        $('#startButton').on('click', function () {
+            if (stream) {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = function (e) {
+                    chunks.push(e.data);
+                };
+                mediaRecorder.onstop = function () {
+                    var blob = new Blob(chunks, {
+                        type: 'video/mp4'
+                    });
+                    chunks = [];
+                    var videoURL = URL.createObjectURL(blob);
+                    var downloadLink = document.createElement('a');
+                    downloadLink.href = videoURL;
+                    downloadLink.download = 'recorded-video.mp4';
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    $('#recordingIndicator').hide();
+                    clearInterval(timerInterval);
+                };
+                try {
+                    mediaRecorder.start();
+                    $('#startButton').prop('disabled', true);
+                    $('#stopButton').prop('disabled', false);
+                    $('#recordingIndicator').show();
+                    var startTime = Date.now();
+                    timerInterval = setInterval(function () {
+                        var elapsedTime = Date.now() - startTime;
+                        var minutes = Math.floor(elapsedTime / 60000);
+                        var seconds = Math.floor((elapsedTime % 60000) / 1000);
+                        var timerString = ('0' + minutes).slice(-2) + ':' + ('0' + seconds).slice(-2);
+                        $('#timer').text(timerString);
+                    }, 1000);
+                } catch (error) {
+                    console.log("Failed to start MediaRecorder: " + error.message);
+                }
+            }
+        });
+
+        $('#stopButton').on('click', function () {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                $('#startButton').prop('disabled', false);
+                $('#stopButton').prop('disabled', true);
+            }
+        });
+
+        $('#webcamModal').on('show.bs.modal', function () {
+            $('#startButton').appendTo('.modal-footer');
+            $('#stopButton').appendTo('.modal-footer');
+        });
+
+        // Add event listener to full screen button
+        $('#fullScreenButton').on('click', function () {
+            if (video.requestFullscreen) {
+                video.requestFullscreen();
+            } else if (video.webkitRequestFullscreen) {
+                video.webkitRequestFullscreen();
+            } else if (video.msRequestFullscreen) {
+                video.msRequestFullscreen();
+            }
+        });
+    });
+</script>
+{% endblock content %}

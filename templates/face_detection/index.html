@@ -1,0 +1,67 @@
+{% extends "users/base.html" %}
+{% block title %} Drive Care Home {% endblock title%}
+{% block content %}
+<div class="jumbotron text-center">
+    <h1 class="display-4" style="font-size: 3rem;">Welcome, {{user.username|default:'Guest'}}</h1>
+    {% if user.is_authenticated %}
+    <h4 style="font-size: 1.5rem;">Drive Care Protection System</h4>
+    <div class="progress" style="height: 10px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar"
+            aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 100%;"></div>
+        <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" role="progressbar"
+            aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>
+    </div>
+    <img src="{% url 'video_feed' %}" style="width: 100%; height: auto;" onclick="this.requestFullscreen();"
+        loading="lazy">
+    <hr class="my-2">
+    <p class="lead">
+        <a class="btn btn-success btn-lg" href="{% url 'users-home' %}" role="button">Home</a>
+        <a class="btn btn-primary btn-lg" href="{% url 'logout' %}" role="button">Logout</a>
+        {% else %}
+        <a class="btn btn-primary btn-lg" href="{% url 'login' %}" role="button">Sign in</a>
+        {% endif %}
+    </p>
+</div>
+<script>
+    const fullscreenImg = document.getElementById('fullscreen-img');
+    document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) {
+            fullscreenImg.style.objectFit = 'contain';
+        } else {
+            fullscreenImg.style.objectFit = 'cover';
+        }
+    });
+</script>
+<script>
+    let intervalId;
+    let timeoutId;
+    const incrementAmount = 5;
+
+    function updateProgressBars(data) {
+        let percentage = 100 - data.alert_count;
+        const greenProgressBar = document.querySelector('.bg-success');
+        const redProgressBar = document.querySelector('.bg-danger');
+        greenProgressBar.style.width = `${percentage}%`;
+        redProgressBar.style.width = `${100 - percentage}%`;
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            percentage += incrementAmount;
+            greenProgressBar.style.width = `${percentage}%`;
+            redProgressBar.style.width = `${100 - percentage}%`;
+        }, 10000);
+    }
+
+    fetch('/get_alert_count')
+        .then(response => response.json())
+        .then(data => {
+            updateProgressBars(data);
+            intervalId = setInterval(() => {
+                fetch('/get_alert_count')
+                    .then(response => response.json())
+                    .then(data => {
+                        updateProgressBars(data);
+                    });
+            }, 1000);
+        });
+</script>
+{% endblock content %}
